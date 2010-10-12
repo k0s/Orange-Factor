@@ -146,6 +146,63 @@
     });
   }
 
+  function showLineGraphMultiple(dailyMetric, labelText) {
+    $("#placeholder").css("height","300px");
+    var plotdata = Array();
+    for (var idx in dailyMetric) {
+      if (idx > 0) {
+        plotdata.push({data: dailyMetric[idx], label: labelText[idx], yaxis: 2});
+      } else {
+        plotdata.push({data: dailyMetric[idx], label: labelText[idx]});
+      }
+    }
+    $.plot($("#placeholder"), plotdata, {
+             grid: { hoverable: true, clickable: true },
+             series: 
+               { points: { show: true },
+                 lines: { show: true } 
+               },
+             xaxis: 
+               { mode: "time", 
+                 min: (getDate(gStartDate).getTime()),
+                 max: (getDate(gEndDate).getTime())
+               },
+             yaxis: { min: 0 },
+             y2axis: { min: 0 },
+             legend: { position: 'nw' },
+             });
+
+    var previousPoint = null;
+    $("#placeholder").bind("plothover", function (event, pos, item) {
+        $("#x").text(pos.x.toFixed(2));
+        $("#y").text(pos.y.toFixed(2));
+
+        if (item) {
+            if (previousPoint != item.datapoint) {
+                previousPoint = item.datapoint;
+                    
+                $("#tooltip").remove();
+                var x = item.datapoint[0].toFixed(2),
+                    y = item.datapoint[1].toFixed(2);
+
+                  showLineTooltip(item.pageX, item.pageY,
+                            x, ' ' + item.series.label + ' ' + y);
+            }
+        }
+        else {
+            $("#tooltip").remove();
+            previousPoint = null;            
+        }
+    });
+
+    $("#placeholder").bind("plotclick", function (event, pos, item) {
+        if (item) {
+            $("#clickdata").text("You clicked point " + item.dataIndex + " in " + item.series.label + ".");
+            plot.highlight(item.series, item.datapoint);
+        }
+    });
+  }
+
   function showBarGraphDay(points, test, plat, startday, endday) {
     $("#placeholder").css("height","300px");
     var labelText = test + " " + plat;

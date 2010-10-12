@@ -12,8 +12,8 @@ import os
 
 http = httplib2.Http(".cache")
 
-push_url = 'http://jmaher.couchone.com:5984/orange_factor'
-#push_url = 'http://localhost:5984/orange_factor'
+#push_url = 'http://jmaher.couchone.com:5984/orange_factor'
+push_url = 'http://localhost:5984/orange_factor'
 
 g_bugdata = '/home/joel/mozilla/orange_data/Bugs/'
 g_tboxdata = '/home/joel/mozilla/orange_data/'
@@ -205,7 +205,15 @@ def parseData(refdate):
         d = datetime.date(int(parts[0]), int(parts[1]), int(parts[2]))
         if (d > yesterday): #really 30 days of history
           c += 1
-          matches = tbox.search(comment['text'])
+          if comment['text'] == None or comment['text'] == '{}':
+            continue
+            
+          try:
+            matches = tbox.search(comment['text'])
+          except:
+            print "BAD COMMENT: " + str(comment['text'])
+            continue
+            
           if matches:
             m += 1
             tboxid = matches.group(0)

@@ -19,12 +19,15 @@ testruns = {'M':{'1':'mochitests-1/5',
 branches = {'m-c':'mozilla-central'};
 buildtypes = {'o':'opt', 'd':'debug'};
 
-function clearPage() {
+function clearPage(clearCalendar) {
   $("#display").html('');
   $("#placeholder").html('');
   $("#details").html('');
   $("#misc").html('');
   $("#tooltip").remove();
+  if (clearCalendar == true) {
+    $("#calendar").html('');
+  }
 }
 
 function getPlatformAsArray(val) {
@@ -106,7 +109,7 @@ function findLaterDate(a, b) {
     return a;
   return b;
 }
-  
+
 function calculateMetric(data, range) {
   var history = [];
   if (range === undefined) {

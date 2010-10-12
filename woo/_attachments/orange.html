@@ -15,6 +15,7 @@
          finding a quantitative method for measuring if we are improving or degrading over time.
       </p>
       <p>more details: <a href="about.html">about:orangefactor</a></p>
+      <p><a href="http://github.com/jmaher/Orange-Factor">code on github</a></a>
     </div>
     <div id="display"></div>
     <div id="placeholder"></div>
@@ -36,18 +37,66 @@
   var gEndDate = "";
 
   function parseBugs(data) {
-    results = {};
-    for (row in data.rows) {
-      r = data.rows[row];
-      if (r.key == null)
+    var results = {};
+    var dateresults = {};
+    var pushresults = {};
+    var movingresults = {};
+    var movingdays = 7;
+    var dr = data["rows"];
+    for (row in dr) {
+      var r = dr[row];
+      var key = r["key"][0];
+      if (key == null)
         continue
         
-      if (results[r.key[1]] == null) {
-        results[r.key[1]] = new Array();
+      if (results[key] == null) {
+        results[key] = new Array();
       }
-      results[r.key[1]].push({"date":r.key[0], "data":r.value});
+
+      var date = r["value"][1]["date"];
+      var parts = date.split('-');
+      var d = new Date(parts[0], (parseInt(parts[1], 10) -1), parts[2]);
+      var udate = d.getTime();
+      results[key].push({"date":date, "udate":udate, "pushcount": r["value"][0], "data":r["value"][1]});
     }
-    return results;
+    for (row in results) {
+      results[row] = results[row].sort(function(a, b) { return a["udate"] - b["udate"]});
+      var datecount = {};
+      var pushcount = {};
+      for (item in results[row]) {
+        var it = results[row][item]
+        date = it["udate"];
+        if (datecount[date] == null) {
+          datecount[date] = 0;
+          pushcount[date] = it["pushcount"];
+        }
+        datecount[date] += 1;
+      }
+      var dateArray = [];
+      var pushArray = [];
+      var movingArray = [];
+      var movingSum = [];
+      movingIter = 0;
+      for (d in datecount)  {
+        dateArray.push([d, datecount[d]]);
+        pushArray.push([d, datecount[d]/pushcount[d]]);
+        movingSum.push(datecount[d]/pushcount[d]);
+        if (movingIter >= movingdays) {
+          var sum = 0;
+          for (var idx = 0; idx < movingSum.length; idx++)
+            sum += movingSum[idx];
+          
+          sum = sum / movingSum.length;
+          movingSum.shift();
+          movingArray.push([d, sum]);
+        }
+        movingIter += 1;
+      }
+      dateresults[row] = dateArray;
+      pushresults[row] = pushArray;
+      movingresults[row] = movingArray;
+    }
+    return [results, dateresults, pushresults, movingresults];
   }
 
 
@@ -67,21 +116,21 @@
 
         var mplat = false;
         if (platform === undefined || platform == '' || platform == 'All') {
-          mplat = true;;
+          mplat = true;
         } else if (platform == or.platform) {
           mplat = true;
         }
 
         var mbranch = false;
         if (branch === undefined || branch == '' || branch == 'All') {
-          mbranch = true;;
+          mbranch = true;
         } else if (branch == or.branch) {
           mbranch = true;
         }
 
         var mtype = false;
         if (type === undefined || type == '' || type == 'All') {
-          mtype = true;;
+          mtype = true;
         } else if (type == or.buildtype) {
           mtype = true;
         }
@@ -112,7 +161,7 @@
               title = true;
               text += '<p><span id="bug">' + bug.test + '</span></p>';
             }
-            text += '<p><span id="bug"><a href="#" onclick="displayBug(gApp, \'#display\', '+ id + ');return false;">';
+            text += '<p><span id="bug"><a href="#" onclick="displayBug(gApp, \'#display\', \''+ id + '\');return false;">';
             text += id + '</a> (' + bug.count + ') - </span>';
             text += '<span id="summary">' + bug.summary + '</span></p>';
           }
@@ -140,20 +189,30 @@
   
   function displayBug(app, id, bugid) {
     var text = '';
+    clearPage();
+    text += "<h1>Detail for bug: " + bugid + "</h1>";
     app.db.view('woo/bybug',
                 {success: function(data) {
                   var results = parseBugs(data);
-                  for (bug in results) {
-                    b = results[bug];
-                    text += '<span id="bug">' + bug + ': ' + b.length;
+                  table = "<table><tr><td>Date</td><td>Platform</td><td>BuildType</td></tr>";
+                  for (bug in results[0]) {
+                    b = results[0][bug];
+                    text += '<span id="bug"><a href="https://bugzilla.mozilla.org/show_bug.cgi?id=' + bug + '">' + bug + '</a>, ' + b.length + ' total failures';
                     text += ': </span><span id="summary">';
                     text += b[0].data.summary;
                     text += '</span><p>';
+                    for (item in b) {
+                      var dat = b[item].data;
+                      table += "<tr><td>"+b[item].date + "</td><td>" + dat.platform + "</td><td>" + dat.buildtype + "</td></tr>";
+                    }
                   }
-                  $(id).html(text);
+                  table += "</table>";
+                  $("#display").html(text);
+                  showLineGraphMultiple([results[1][bugid], results[2][bugid], results[3][bugid]], ["Bug Frequency (BF)", "Frequency/Pushes per Day (F/P/D)", "7day moving avg of F/P/D"]);
+                  $("#details").html(table);
+
                 },
-                startkey: [,bugid],
-                endkey: [,bugid],
+                key: [parseInt(bugid, 10)],
                 });
   }
 
@@ -321,7 +380,7 @@
   }
 
   function displayOverview(app) {
-    clearPage();
+    clearPage(true);
     displayMetric(app, "#overall");
     displayHeatMap(app, "#display");
     buildCalendar(app, "#calendar");  
