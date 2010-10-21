@@ -5,8 +5,7 @@
       var jdate = new Date(Math.floor(contents));
       var today = getTboxDate(jdate);
       var content = '<div id="tooltip">';
-      content += '<a href="#" onclick="';
-      content += 'displayHeatMap(gApp, \'#display\', \'' + today + '\',\'' + getTboxDate(jdate, 1) + '\');$(\'#tooltip\').remove();return false;">';
+      content += '<a href="' + buildUrl('HeatMap', {startday: today, endday: getTboxDate(jdate, 1)}) + '">';
       content += jdate.toDateString() + extracontents + '</a>';
       content += '</div>';
       
@@ -29,8 +28,7 @@
       var jdate = new Date(Math.floor(contents));
       var today = getTboxDate(jdate);
       var content = '<div id="tooltip">';
-      content += '<a href="#" onclick="';
-      content += 'displayHeatMap(gApp, \'#display\', \'' + today + '\',\'' + getTboxDate(jdate, 1) + '\');$(\'#tooltip\').remove();return false;">';
+      content += '<a href="' + buildUrl('HeatMap', {startday: today, endday: getTboxDate(jdate, 1)}) + '">';
       content += jdate.toDateString() + '</a>';
       content += '</div>';
       
@@ -48,8 +46,8 @@
 
   function showBarGraph(points, test, plat, startday, endday) {
     var labelText = test + " " + plat;
-    var minTime = getDate(gStartDate).getTime();
-    var maxTime = getDate(gEndDate).getTime();
+    var minTime = getDate(startday).getTime();
+    var maxTime = getDate(endday).getTime();
     if (startday == endday) {
       minTime = null;
       maxTime = null;
@@ -100,7 +98,7 @@
 
   }
 
-  function showLineGraph(dailyMetric, labelText) {
+  function showLineGraph(dailyMetric, labelText, startday, endday) {
     $("#placeholder").css("height","300px");
     $.plot($("#placeholder"), [{data: dailyMetric, label: labelText}], {
              grid: { hoverable: true, clickable: true },
@@ -110,8 +108,8 @@
                },
              xaxis: 
                { mode: "time", 
-                 min: (getDate(gStartDate).getTime()),
-                 max: (getDate(gEndDate).getTime())
+                 min: (getDate(startday).getTime()),
+                 max: (getDate(endday).getTime())
                }
              });
 
@@ -146,7 +144,7 @@
     });
   }
 
-  function showLineGraphMultiple(dailyMetric, labelText) {
+  function showLineGraphMultiple(dailyMetric, labelText, startday, endday) {
     $("#placeholder").css("height","300px");
     var plotdata = Array();
     for (var idx in dailyMetric) {
@@ -164,8 +162,8 @@
                },
              xaxis: 
                { mode: "time", 
-                 min: (getDate(gStartDate).getTime()),
-                 max: (getDate(gEndDate).getTime())
+                 min: startday,
+                 max: endday
                },
              yaxis: { min: 0 },
              y2axis: { min: 0 },

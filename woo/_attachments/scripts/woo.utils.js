@@ -145,4 +145,24 @@ function calculateMetric(data, range) {
   return [Math.floor((totaloranges / totalpushes) * 100) / 100, totaloranges, totalpushes, history];
 }
 
+function baseUrl() {
+  return window.location.protocol + '//' + window.location.host +
+         window.location.pathname;
+}
 
+function buildUrl(display_name, args) {
+  var url = baseUrl() + '?display=' + display_name;
+  for (a in args) {
+    url += '&' + a + '=' + args[a];
+  }
+  return url;
+}
+
+function displayArgs(args) {
+  var s = '{';
+  for (a in args) {
+    s += a + ':' + args[a] + ',';
+  }
+  s += '}';
+  return s;
+}

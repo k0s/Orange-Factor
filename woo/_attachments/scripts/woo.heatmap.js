@@ -68,7 +68,10 @@ function buildDailyHeatMap(oranges, results) {
 }
   
   
-function displayHeatMap(app, id, startday, endday) {
+function displayHeatMap(app, id, args) {
+  var startday = args['startday'];
+  var endday = args['endday'];
+
   if (startday == "" || startday === undefined) {
     startday = '';
   }
@@ -82,8 +85,8 @@ function displayHeatMap(app, id, startday, endday) {
 
         var hm = buildHeatMap(data);
         var dr = getDateRange(data);
-        if (gStartDate == "") gStartDate = dr[0];
-        if (gEndDate == "") gEndDate = dr[1];
+        if (startday == "") startday = dr[0];
+        if (endday == "") endday = dr[1];
         var metric = calculateMetric(data);
               
         text += '<p><span id="title">';
@@ -117,13 +120,16 @@ function displayHeatMap(app, id, startday, endday) {
               }
               var parts = item.split(type, 2);
               text += '<span id="' + mapid + '">';
-              text += '<a href="#" id="' + mapid + '" onclick="';
-              text += 'displayTestRun(gApp, \'#display\', \'' + getPlatformID(plat) + '\'';
-              text += ',\'' + results[plat][item][1] + '\'';
-              text += ',\'' + 'mozilla-central' + '\'';
-              text += ',\'' + 'opt' + '\'';
-              text += ',\'' + startday + '\'';
-              text += ',\'' + getTboxDate(getDate(endday), -1) + '\');return false;">';
+              text += '<a href="'
+              text += buildUrl('TestRun', {
+                plat: getPlatformID(plat),
+                test: results[plat][item][1],
+                branch: 'mozilla-central',
+                type: 'opt',
+                startday: startday,
+                endday: getTboxDate(getDate(endday), -1)
+              });
+              text += '" id="' + mapid + '">';
               text += parts[1] + '</a>';
               text += '</span>&nbsp;';
               if (parts[1] == 'Oth') {
@@ -132,13 +138,16 @@ function displayHeatMap(app, id, startday, endday) {
               }
             } else {
               text += '<span id="' + mapid + '">';
-              text += '<a href="#" id="' + mapid + '" onclick="';
-              text += 'displayTestRun(gApp, \'#display\', \'' + getPlatformID(plat) + '\'';
-              text += ', \'' + results[plat][item][1] + '\'';
-              text += ',\'' + 'mozilla-central' + '\'';
-              text += ',\'' + 'opt' + '\'';
-              text += ', \'' + startday + '\'';
-              text += ',\'' + getTboxDate(getDate(endday), -1) + '\');return false;">';
+              text += '<a href="'
+              text += buildUrl('TestRun', {
+                plat: getPlatformID(plat),
+                test: results[plat][item][1],
+                branch: 'mozilla-central',
+                type: 'opt',
+                startday: startday,
+                endday: getTboxDate(getDate(endday), -1)
+              });
+              text += '" id="' + mapid + '">';
               text += item + '</a>';
               text += '&nbsp;</span>&nbsp;';
             }
@@ -150,7 +159,7 @@ function displayHeatMap(app, id, startday, endday) {
         $(id).html(text);
         var det = '';
         if (dr[0] != dr[1]) {
-          showLineGraph(metric[3], "Orange Factor");
+          showLineGraph(metric[3], "Orange Factor", startday, endday);
         } else {
           var graphdata = [];
           var dayresults = {};

@@ -8,7 +8,7 @@
     <div id="overall"></div>
     <div id="calendar"></div>
     <div id="sidebar">
-      <p>Back to <a href="#" onclick="displayOverview(gApp);return false;">overview</a></p>
+      <p>Back to <a href="#" onclick="window.location.assign(baseUrl());return false;">overview</a></p>
       <p>Welcome to Orange Factor</p>
       <p>Here we will tell you the chance of getting an orange for any given checkin!</p>
       <p>Our goal is to provide a useful tool for measuring the orange in our trees while 
@@ -76,8 +76,16 @@
       var pushArray = [];
       var movingArray = [];
       var movingSum = [];
+      var startdate = 0;
+      var enddate = 0;
       movingIter = 0;
       for (d in datecount)  {
+        if (enddate < d) {
+          enddate = d;
+        }
+        if (startdate <= 0 || startdate > d) {
+          startdate = d;
+        }
         dateArray.push([d, datecount[d]]);
         pushArray.push([d, datecount[d]/pushcount[d]]);
         movingSum.push(datecount[d]/pushcount[d]);
@@ -96,7 +104,7 @@
       pushresults[row] = pushArray;
       movingresults[row] = movingArray;
     }
-    return [results, dateresults, pushresults, movingresults];
+    return [results, dateresults, pushresults, movingresults, startdate, enddate];
   }
 
 
@@ -161,7 +169,7 @@
               title = true;
               text += '<p><span id="bug">' + bug.test + '</span></p>';
             }
-            text += '<p><span id="bug"><a href="#" onclick="displayBug(gApp, \'#display\', \''+ id + '\');return false;">';
+            text += '<p><span id="bug"><a href="' + buildUrl('Bug', {bugid: id}) + '">';
             text += id + '</a> (' + bug.count + ') - </span>';
             text += '<span id="summary">' + bug.summary + '</span></p>';
           }
@@ -187,7 +195,10 @@
                 });
   }
   
-  function displayBug(app, id, bugid) {
+  function displayBug(app, id, args) {
+    var bugid = args['bugid'];
+    if (isNaN(parseInt(bugid, 10)))
+      return;
     var text = '';
     clearPage();
     text += "<h1>Detail for bug: " + bugid + "</h1>";
@@ -208,7 +219,7 @@
                   }
                   table += "</table>";
                   $("#display").html(text);
-                  showLineGraphMultiple([results[1][bugid], results[2][bugid], results[3][bugid]], ["Bug Frequency (BF)", "Frequency/Pushes per Day (F/P/D)", "7day moving avg of F/P/D"]);
+                  showLineGraphMultiple([results[1][bugid], results[2][bugid], results[3][bugid]], ["Bug Frequency (BF)", "Frequency/Pushes per Day (F/P/D)", "7day moving avg of F/P/D"], results[4], results[5]);
                   $("#details").html(table);
 
                 },
@@ -256,13 +267,13 @@
     }
     return [results, count];
   }
-  
+
   function buildDropDown(dataset, index, id, plat, test, branch, btype, startday, endday) {
-    var p = '\''+plat+'\'';
-    var t = '\''+test+'\'';
-    var b = '\''+branch+'\'';
-    var type = '\''+btype+'\'';
-    
+    var p = "'" + encodeURIComponent(plat) + "'";
+    var t = "'" + encodeURIComponent(test) + "'";
+    var b = "'" + encodeURIComponent(branch) + "'";
+    var type = "'" + encodeURIComponent(btype) + "'";
+
     if (index == "testrun") {
       index = test;
       t = 'this.options[this.selectedIndex].value';
@@ -276,15 +287,17 @@
       index = btype;
       type = 'this.options[this.selectedIndex].value';
     }
-  
+
+    var args = { plat: p,
+                 test: t,
+                 branch: b,
+                 type: type,
+                 startday: "'" + startday + "'",
+                 endday: "'" + endday + "'"};
+
     text = '<select id="testruns" ';
-    text += 'onchange="displayTestRun(gApp,\''+id+'\',';
-    text += p+',';
-    text += t+',';
-    text += b+',';
-    text += type+',';
-    text += '\''+startday+'\',';
-    text += '\''+endday+'\');">';
+    text += 'onchange="window.location.assign(buildUrl(\'TestRun\', ' +
+            displayArgs(args) + '));">';
     text += '<option value="All"';
     if (index == '' || index == 'All') {
       text += ' SELECTED ';
@@ -309,7 +322,14 @@
     return text;  
   }
 
-  function displayTestRun(app, id, plat, test, branch, type, startday, endday) {
+  function displayTestRun(app, id, args) {
+      var plat = args['plat'],
+          test = args['test'],
+          branch = args['branch'],
+          type = args['type'],
+          startday = args['startday'],
+          endday = args['endday'];
+
       if (startday == "" || startday === undefined) {
         startday = '';
       }
@@ -379,12 +399,40 @@
          });
   }
 
-  function displayOverview(app) {
-    clearPage(true);
-    displayMetric(app, "#overall");
-    displayHeatMap(app, "#display");
-    buildCalendar(app, "#calendar");  
+  function mapLoaded() {
+    return loadSearchQuery(gApp, "#display");
   }
+
+  function displayOverview(app) {
+    displayMetric(app, "#overall");
+    buildCalendar(app, "#calendar");  
+    if (!mapLoaded()) {
+      clearPage(true);
+      displayHeatMap(app, "#display", {});
+    }
+  }
+
+  function loadSearchQuery(app, id) {
+    var params = document.location.search.slice(1).split("&");
+    var display_func = "";
+    var args = new Object();
+    for (p in params) {
+      var l = params[p].split("=").map(function(x)
+          { return decodeURIComponent(x); });
+      if (l.length != 2)
+        continue;
+      if (l[0] == "display")
+        display_func = "display" + l[1];
+      else
+        args[l[0]] = l[1];
+    }
+
+    if (!display_func || typeof window[display_func] != "function")
+      return false;
+
+    window[display_func](app, id, args);
+    return true;
+ }
 
   $.couch.app(function(app) {
     gApp = app;

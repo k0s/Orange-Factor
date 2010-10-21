@@ -35,8 +35,9 @@ function getId(year, month, table, day) {
   if (table[day] === undefined) {
     retVal += day;
   } else {
-    retVal += '<a href="#" id="' + spanid + '" onclick="';
-    retVal += 'displayHeatMap(gApp, \'#display\', \'' + today + '\',\'' + tomorrow + '\');return false;">';
+    retVal += '<a href="' +
+              buildUrl('HeatMap', {startday: today, endday: tomorrow}) +
+              '">';
     retVal += day + '</a>';
   }
   retVal += '</span>';
