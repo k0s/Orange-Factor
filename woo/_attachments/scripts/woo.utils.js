@@ -21,8 +21,7 @@ buildtypes = {'o':'opt', 'd':'debug'};
 
 function clearPage(clearCalendar) {
   $("#display").html('');
-  $("#placeholder").html('');
-  $("#details").html('');
+  $("#placeholder").html('<p id="loading"><br/><br/><br/>Loading...</p>');  $("#details").html('');
   $("#misc").html('');
   $("#tooltip").remove();
   if (clearCalendar == true) {

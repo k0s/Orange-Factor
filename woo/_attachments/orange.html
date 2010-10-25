@@ -27,157 +27,14 @@
   <script src="vendor/couchapp/scripts/jquery.js"></script>
   <script src="vendor/couchapp/scripts/jquery.couch.js"></script>
   <script src="scripts/jquery.flot.min.js"></script>
+  <script src="scripts/jquery.flot.stack.js"></script>
   <script src="scripts/woo.utils.js"></script>
   <script src="scripts/woo.graphs.js"></script>
   <script src="scripts/woo.calendar.js"></script>
   <script src="scripts/woo.heatmap.js"></script>
+  <script src="scripts/woo.bugs.js"></script>
   <script type="text/javascript" charset="utf-8">
   var gApp = null;
-  var gStartDate = "";
-  var gEndDate = "";
-
-  function parseBugs(data) {
-    var results = {};
-    var dateresults = {};
-    var pushresults = {};
-    var movingresults = {};
-    var movingdays = 7;
-    var dr = data["rows"];
-    for (row in dr) {
-      var r = dr[row];
-      var key = r["key"][0];
-      if (key == null)
-        continue
-        
-      if (results[key] == null) {
-        results[key] = new Array();
-      }
-
-      var date = r["value"][1]["date"];
-      var parts = date.split('-');
-      var d = new Date(parts[0], (parseInt(parts[1], 10) -1), parts[2]);
-      var udate = d.getTime();
-      results[key].push({"date":date, "udate":udate, "pushcount": r["value"][0], "data":r["value"][1]});
-    }
-    for (row in results) {
-      results[row] = results[row].sort(function(a, b) { return a["udate"] - b["udate"]});
-      var datecount = {};
-      var pushcount = {};
-      for (item in results[row]) {
-        var it = results[row][item]
-        date = it["udate"];
-        if (datecount[date] == null) {
-          datecount[date] = 0;
-          pushcount[date] = it["pushcount"];
-        }
-        datecount[date] += 1;
-      }
-      var dateArray = [];
-      var pushArray = [];
-      var movingArray = [];
-      var movingSum = [];
-      var startdate = 0;
-      var enddate = 0;
-      movingIter = 0;
-      for (d in datecount)  {
-        if (enddate < d) {
-          enddate = d;
-        }
-        if (startdate <= 0 || startdate > d) {
-          startdate = d;
-        }
-        dateArray.push([d, datecount[d]]);
-        pushArray.push([d, datecount[d]/pushcount[d]]);
-        movingSum.push(datecount[d]/pushcount[d]);
-        if (movingIter >= movingdays) {
-          var sum = 0;
-          for (var idx = 0; idx < movingSum.length; idx++)
-            sum += movingSum[idx];
-          
-          sum = sum / movingSum.length;
-          movingSum.shift();
-          movingArray.push([d, sum]);
-        }
-        movingIter += 1;
-      }
-      dateresults[row] = dateArray;
-      pushresults[row] = pushArray;
-      movingresults[row] = movingArray;
-    }
-    return [results, dateresults, pushresults, movingresults, startdate, enddate];
-  }
-
-
-  function displayDetails(app, data, platform, test, branch, type, startday, endday) {
-    var text = '<p><span id="title">';
-    text += 'Bugs related to above failures</span></p>';
-
-    var retVal = [];
-    var count = 1;
-    for (row in data.rows) {      
-      var oranges = data.rows[row].value.oranges;
-      if (oranges === undefined) {
-        oranges = [data.rows[row].value];
-      }
-      for (orange in oranges) {
-        var or = oranges[orange];
-
-        var mplat = false;
-        if (platform === undefined || platform == '' || platform == 'All') {
-          mplat = true;
-        } else if (platform == or.platform) {
-          mplat = true;
-        }
-
-        var mbranch = false;
-        if (branch === undefined || branch == '' || branch == 'All') {
-          mbranch = true;
-        } else if (branch == or.branch) {
-          mbranch = true;
-        }
-
-        var mtype = false;
-        if (type === undefined || type == '' || type == 'All') {
-          mtype = true;
-        } else if (type == or.buildtype) {
-          mtype = true;
-        }
-
-        if (mplat && mbranch && mtype) {
-          if (retVal[or.bug] === undefined) {
-            retVal[or.bug] = {'summary':or.summary, 'test':or.test, 'count':1};
-          } else {
-            retVal[or.bug].count += 1;
-          }
-        }
-      }
-    }
-    
-    for (testrun in testruns) {
-      if (typeof(testruns[testrun]) != "object") {
-        var blob = {};
-        blob[testrun] = testruns[testrun];
-      } else {
-        blob = testruns[testrun];
-      }
-      for (sub in blob) {
-        var title = false;
-        for (id in retVal) {
-          var bug = retVal[id];
-          if (bug.test == blob[sub]) {
-            if (!title) {
-              title = true;
-              text += '<p><span id="bug">' + bug.test + '</span></p>';
-            }
-            text += '<p><span id="bug"><a href="' + buildUrl('Bug', {bugid: id}) + '">';
-            text += id + '</a> (' + bug.count + ') - </span>';
-            text += '<span id="summary">' + bug.summary + '</span></p>';
-          }
-        }
-      }
-    }
-    return text;
-  }
 
   //TODO: consider using range as a filter for startkey/endkey or creating a new view
   function displayMetric(app, id, range) {
@@ -195,37 +52,6 @@
                 });
   }
   
-  function displayBug(app, id, args) {
-    var bugid = args['bugid'];
-    if (isNaN(parseInt(bugid, 10)))
-      return;
-    var text = '';
-    clearPage();
-    text += "<h1>Detail for bug: " + bugid + "</h1>";
-    app.db.view('woo/bybug',
-                {success: function(data) {
-                  var results = parseBugs(data);
-                  table = "<table><tr><td>Date</td><td>Platform</td><td>BuildType</td></tr>";
-                  for (bug in results[0]) {
-                    b = results[0][bug];
-                    text += '<span id="bug"><a href="https://bugzilla.mozilla.org/show_bug.cgi?id=' + bug + '">' + bug + '</a>, ' + b.length + ' total failures';
-                    text += ': </span><span id="summary">';
-                    text += b[0].data.summary;
-                    text += '</span><p>';
-                    for (item in b) {
-                      var dat = b[item].data;
-                      table += "<tr><td>"+b[item].date + "</td><td>" + dat.platform + "</td><td>" + dat.buildtype + "</td></tr>";
-                    }
-                  }
-                  table += "</table>";
-                  $("#display").html(text);
-                  showLineGraphMultiple([results[1][bugid], results[2][bugid], results[3][bugid]], ["Bug Frequency (BF)", "Frequency/Pushes per Day (F/P/D)", "7day moving avg of F/P/D"], results[4], results[5]);
-                  $("#details").html(table);
-
-                },
-                key: [parseInt(bugid, 10)],
-                });
-  }
 
   function parseTestRun(data, plat, branch, type) {
     var results = {};
@@ -405,7 +231,8 @@
 
   function displayOverview(app) {
     displayMetric(app, "#overall");
-    buildCalendar(app, "#calendar");  
+    buildCalendar(app, "#calendar");
+    clearPage(true);
     if (!mapLoaded()) {
       clearPage(true);
       displayHeatMap(app, "#display", {});

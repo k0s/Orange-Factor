@@ -44,6 +44,25 @@
       }).appendTo("body").fadeIn(200);
   }
 
+  function showStackTooltip(x, y, contents, bugname) {
+      var content = '<div id="tooltip">';
+
+      content += '<a href="' + buildUrl('Bug', {bugid: bugname}) + '">';
+      content += "Bug " + bugname + '</a>';
+      content += '</div>';
+      
+      $(content).css( {
+          position: 'absolute',
+          display: 'none',
+          top: y + 5,
+          left: x + 5,
+          border: '1px solid #fdd',
+          padding: '2px',
+          'background-color': '#fee',
+          opacity: 0.80
+      }).appendTo("body").fadeIn(200);
+  }
+
   function showBarGraph(points, test, plat, startday, endday) {
     var labelText = test + " " + plat;
     var minTime = getDate(startday).getTime();
@@ -210,12 +229,66 @@
       plats.push([count++, platform]);
     }
     $.plot($("#placeholder"), [{data: points, label: labelText}], {
-             series:
-               { bars: { show: true } 
-               },
-               xaxis: {
-                   ticks: plats
-               },
-             });
+             series: { bars: { show: true } },
+             xaxis: { ticks: plats },
+           });
+  }
+
+  function showBugStacks(bugstats, bugnames) {
+    var times = [];
+    var count = 0;
+    for (idx in bugstats[0]) {
+      var point = bugstats[0][idx];
+      var jdate = new Date(Math.floor(point[0]));
+      var today = getTboxDate(jdate);
+      times.push([point[0], today]);
+    }
+
+    $.plot($("#placeholder"), bugstats, {
+        grid: { hoverable: true, clickable: true },
+        series: {
+          stack: true,
+          lines: {show: false, steps: false },
+          bars: { show: true, barWidth: 500000000 * 0.9 }
+        },
+        xaxis: {
+          ticks: times
+        }
+    });
+
+    var previousPoint = null;
+    $("#placeholder").bind("plothover", function (event, pos, item) {
+      $("#x").text(pos.x.toFixed(2));
+      $("#y").text(pos.y.toFixed(2));
+
+      if (item) {
+        if (previousPoint != item.datapoint) {
+          previousPoint = item.datapoint;
+                    
+          $("#tooltip").remove();
+          var x = item.datapoint[0].toFixed(2),
+              y = item.datapoint[1].toFixed(2);
+
+            var counter = 0;
+            for (stat in bugstats) {
+              if (bugstats[stat] == item.series.data) break;
+              counter++;
+            }
+            showStackTooltip(item.pageX, item.pageY,
+                             item.series, bugnames[counter]);
+        }
+      }
+      else {
+        $("#tooltip").remove();
+        previousPoint = null;            
+      }
+    });
+
+    $("#placeholder").bind("plotclick", function (event, pos, item) {
+      if (item) {
+        $("#clickdata").text("You clicked point " + item.dataIndex + " in " + item.series.label + ".");
+        plot.highlight(item.series, item.datapoint);
+      }
+    });
   }
 
