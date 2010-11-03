@@ -6,19 +6,13 @@ import urllib
 import re
 import datetime
 import httplib2
-import math
 import tempfile
 import os
+import sys
+
+from optparse import OptionParser
 
 http = httplib2.Http(".cache")
-
-#push_url = 'http://jmaher.couchone.com:5984/orange_factor'
-push_url = 'http://localhost:5984/orange_factor'
-
-g_bugdata = '/home/joel/mozilla/orange_data/Bugs/'
-g_tboxdata = '/home/joel/mozilla/orange_data/'
-gDateRange = 30
-
 
 def pushToCouch(data, wooData=None):
     if wooData is not None:
@@ -83,12 +77,15 @@ def getBugzillaData_DATE(yesterday, tomorrow):
       return getBugzillaDataLive(yesterday, tomorrow)
       
 def getBugzillaDataLive_DATE(yesterday, tomorrow):
+
+    # TODO: make configurable
     apiURL = "https://api-dev.bugzilla.mozilla.org/latest/bug"
     apiURL += "?blocks=438871"
     apiURL += "&changed_after=" + str(yesterday)
     apiURL += "&changed_before=" + str(tomorrow)
 #    apiURL += "&status=new,assigned,reopened"
     apiURL += "&include_fields=id,summary,comments"
+    
     print apiURL
     return
     jsonurl = urllib.urlopen(apiURL)
@@ -102,9 +99,12 @@ def getBugzillaDataLive_DATE(yesterday, tomorrow):
     return result
 
 def getHGPushCount(today, tomorrow):
+
+    # TODO: make configurable
     apiURL = "http://hg.mozilla.org/mozilla-central/json-pushes?"
     apiURL += "startdate=" + str(today)
     apiURL += "&enddate=" + str(tomorrow)
+    
     jsonurl = urllib.urlopen(apiURL)
     
     data = jsonurl.read()
@@ -138,8 +138,11 @@ def findMatchDetails(text):
 #technique
 def getTextFromGZ(url):
     id = url.split('=')[1]
+    dirname = os.path.dirname(os.path.join(g_tboxdata, id))
+    if not os.path.exists(dirname):
+        os.makedirs(dirname)
     url += "&fulltext=1"
-    filename = g_tboxdata + id + ".log"
+    filename = os.path.join(g_tboxdata, id + ".log")
     try:
       f = open(filename, 'r')
     except:
@@ -263,7 +266,33 @@ def getWooResults(date):
         return result
     return retVal
 
-def main():
+def main(args=sys.argv[1:]):
+
+    # parse options
+    parser = OptionParser()
+    parser.add_option('-u', '--url', dest='push_url',
+                      default='http://localhost:5984/orange_factor',
+                      help='push_url')
+    parser.add_option('--bugs',  dest='g_bugdata',
+                      default=os.path.join('orange_data', 'Bugs'),
+                      help='where to put bug data')
+    parser.add_option('--tboxdata', dest='g_tboxdata',
+                      default='orange_data',
+                      help='where to put tinderbox data')
+    parser.add_option('--date-range', dest='gDateRange', type='int',
+                      default=30,
+                      help='date range')
+    options, args = parser.parse_args(args)
+    options.push_url = options.push_url.rstrip('/')
+    for directory in 'g_bugdata', 'g_tboxdata':
+        directory = getattr(options, directory)
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+
+    # update global variables from options [HACK]
+    globals().update(options.__dict__)
+
+    # date stuff
     today = datetime.date.today()
     startdate = today - datetime.timedelta(days=1)
     allresults = parseData(startdate)
@@ -274,7 +303,7 @@ def main():
       try:
         pushcount, pushdata = hgpushes[r]
       except:
-        continue #we don't have push data, lets skip for now
+        continue # we don't have push data, lets skip for now
       wooData = getWooResults(r)
       if (wooData != None and len(wooData['rows']) > 0):
         if len(allresults[r]) != wooData['rows'][0]['value']:
@@ -285,7 +314,6 @@ def main():
       if push == True:
         pushToCouch({"date":str(r),"pushcount":pushcount,"pushes":pushdata,"oranges":allresults[r]}, wooData)
 
-    return 
   
 class Cache(dict):
     def __init__(self, *args, **kwargs):
@@ -295,5 +323,5 @@ class Cache(dict):
     set = lambda *args, **kwargs: dict.__setitem__(*args, **kwargs)
       
 if __name__ == "__main__":
-  result = main()
+  main()
 
