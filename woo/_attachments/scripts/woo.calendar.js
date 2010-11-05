@@ -62,7 +62,7 @@ function viewCalendar(data, app, id, month, year, display_count) {
   for (row in data.rows) {
     var date = data.rows[row].key[0];
     var day = date.split('-')[2];
-    month_data[day] = data.rows[row].value;
+    month_data[day] = data.rows[row].key[2];
   }
             
   var startDayOfWeek = (new Date(currentMonth + '/01/' + currentYear)).getDay();

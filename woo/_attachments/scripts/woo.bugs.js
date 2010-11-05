@@ -9,7 +9,7 @@
       var r = dr[row];
       var key = r["key"][0];
       if (key == null)
-        continue
+        continue;
         
       if (results[key] == null) {
         results[key] = new Array();
@@ -124,13 +124,13 @@
     return lumpedArray;
   }
 
-  function displayBug(app, id, args) {
+  function displayBug(app, id, titleid, args) {
     var bugid = args['bugid'];
     if (isNaN(parseInt(bugid, 10)))
       return;
     var text = '';
     clearPage();
-    text += "<h1>Detail for bug: " + bugid + "</h1>";
+    displayTitle(titleid, "Detail for bug " + bugid);
     app.db.view('woo/bybug',
                 {success: function(data) {
                   var results = parseBugs(data);
@@ -199,6 +199,7 @@
                   var results = parseBugs(data);
                   var weekly = parseBugDates(results[1], numdays);
                   var byBug = {};
+                  var allBugs = {};
                   var datelist = [];
                   var week_count = 0;
                   //sort the weeks descending
@@ -208,17 +209,23 @@
                     var d = [];
                     var bugs = weekly[date];
                     var count = 0;
-                    for (var b in bugs) {
-                      var temp = byBug[bugs[b][0]];
-                      if (temp == null) temp = [];
-                      temp.push([date, bugs[b][1]]);
-                      if (datelist.indexOf(date) == -1) datelist.push(date);
-                      byBug[bugs[b][0]] = temp.sort(function(a, b) { return a[0] - b[0]});
-                      if (count++ >= (numbugs - 1))
-                        break;
-                    }
                     week_count++;
-                    if (week_count >= 6) break;
+                    for (var b in bugs) {
+                      var alltemp = allBugs[bugs[b][0]];
+                      if (alltemp == null) alltemp = [];
+                      alltemp.push([date, bugs[b][1]]);
+
+                      if (week_count <= 6) {
+                        if (datelist.indexOf(date) == -1) datelist.push(date);
+                        if (count++ <= (numbugs - 1)) {
+                          var temp = byBug[bugs[b][0]];
+                          if (temp == null) temp = [];
+                          temp.push([date, bugs[b][1]]);
+                          byBug[bugs[b][0]] = temp.sort(function(a, b) { return a[0] - b[0]});
+                        }
+                      }
+                      allBugs[bugs[b][0]] = alltemp.sort(function(a, b) { return a[0] - b[0]});
+                    }
                   }
 
                   var stats = [];
@@ -243,7 +250,18 @@
                       }
                       if (found == false) {
                         tbug = byBug[bug];
-                        tbug.push([datelist[diter], results[1][bug][diter][1]]);
+                        abug = allBugs[bug];
+                        var pushed = false;
+                        for (aitem in abug) {
+                          if (abug[aitem][0] == datelist[diter]) {
+                            tbug.push([datelist[diter], abug[aitem][1]]);
+                            pushed = true;
+                            break;
+                          }
+                        }
+                        if (pushed == false) {
+                          tbug.push([datelist[diter], 0]);
+                        }
                         byBug[bug] = tbug;
                       }
                     }
@@ -271,74 +289,29 @@
                 });
   }
 
-  function displayDetails(app, data, platform, test, branch, type, startday, endday) {
-    var text = '<p><span id="title">';
-    text += 'Bugs related to above failures</span></p>';
+  function displayDetails(app, id, platform, test, branch, type, startday, endday) {
 
-    var retVal = [];
-    var count = 1;
-    for (row in data.rows) {      
-      var oranges = data.rows[row].value.oranges;
-      if (oranges === undefined) {
-        oranges = [data.rows[row].value];
-      }
-      for (orange in oranges) {
-        var or = oranges[orange];
+    //TODO: this is my way to do this in sql: 
+    //   'select * from oranges where platform=platform and type=type and date>=startday and date<endday'
+    //
+    // ideally I could do this with filtering on they keys with startkey/endkey and grouping, but it doesn't seem to work
+    // I need to come up with a cleaner solution for outputing data and making more streamlined queries that only transfer what we need
 
-        var mplat = false;
-        if (platform === undefined || platform == '' || platform == 'All') {
-          mplat = true;
-        } else if (platform == or.platform) {
-          mplat = true;
-        }
+    var view = buildCouchView('bug_simple', platform, type, test, startday, endday);
+    var query = view[0];
+    var start_key = view[1];
+    var end_key = view[2];
+    var index_map = view[3];
+    var testindex = index_map[2];
 
-        var mbranch = false;
-        if (branch === undefined || branch == '' || branch == 'All') {
-          mbranch = true;
-        } else if (branch == or.branch) {
-          mbranch = true;
-        }
-
-        var mtype = false;
-        if (type === undefined || type == '' || type == 'All') {
-          mtype = true;
-        } else if (type == or.buildtype) {
-          mtype = true;
-        }
-
-        if (mplat && mbranch && mtype) {
-          if (retVal[or.bug] === undefined) {
-            retVal[or.bug] = {'summary':or.summary, 'test':or.test, 'count':1};
-          } else {
-            retVal[or.bug].count += 1;
-          }
-        }
-      }
-    }
-    
-    for (testrun in testruns) {
-      if (typeof(testruns[testrun]) != "object") {
-        var blob = {};
-        blob[testrun] = testruns[testrun];
-      } else {
-        blob = testruns[testrun];
-      }
-      for (sub in blob) {
-        var title = false;
-        for (id in retVal) {
-          var bug = retVal[id];
-          if (bug.test == blob[sub]) {
-            if (!title) {
-              title = true;
-              text += '<p><span id="bug">' + bug.test + '</span></p>';
-            }
-            text += '<p><span id="bug"><a href="' + buildUrl('Bug', {bugid: id}) + '">';
-            text += id + '</a> (' + bug.count + ') - </span>';
-            text += '<span id="summary">' + bug.summary + '</span></p>';
-          }
-        }
-      }
-    }
-    return text;
+    app.db.view(query, 
+      {success: function(data) {
+          $(id).html(listDetails(data, testindex));
+      },
+      startkey: start_key,
+      endkey: end_key,
+      group_level: 6,
+      reduce: true
+    });
   }
 

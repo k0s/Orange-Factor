@@ -24,9 +24,8 @@ function buildHeatMap(data) {
   var results = {};
   var total = 0;
   for (row in data.rows) {
-    var oranges = data.rows[row].value.oranges;
-    total += oranges.length;
-    results = buildDailyHeatMap(oranges, results);
+    total += data.rows[row].key[2];
+    results = buildDailyHeatMap(data.rows[row], results);
   }
   return [results, total];
 }
@@ -50,16 +49,15 @@ function buildDailyHeatMap(oranges, results) {
           if (testrun == sub) {
             testid = testrun + type;
           }
-          pr[testid] = [0, blob[sub]];
-             
-          for (orange in oranges) {
-            var or = oranges[orange];                    
-            if (or.platform == platforms[platform] &&
-                or.test == blob[sub] &&
-                or.buildtype == buildtypes[type]) {
-                  pr[testid][0] += 1;
-            }
-          } //orange in oranges
+          if (pr[testid] === undefined || pr[testid] == null) {
+            pr[testid] = [0, blob[sub]];
+          }
+           
+          if (oranges.key[3] == platforms[platform] &&
+              oranges.key[4] == blob[sub] &&
+              oranges.key[5] == buildtypes[type]) {
+                pr[testid][0] += oranges.value;
+          }
         } //sub in blob
       } //type in buildtypes
     } //testrun in testruns
@@ -68,10 +66,12 @@ function buildDailyHeatMap(oranges, results) {
 }
   
   
-function displayHeatMap(app, id, args) {
+function displayHeatMap(app, id, titleid, args) {
   var startday = args['startday'];
   var endday = args['endday'];
 
+  displayMetric(app, titleid, startday, endday);
+  
   if (startday == "" || startday === undefined) {
     startday = '';
   }
@@ -79,7 +79,7 @@ function displayHeatMap(app, id, args) {
     endday = getTboxDate();
   }
       
-  app.db.view('woo/date', 
+  app.db.view('woo/heat_simple', 
      {success: function(data) {
         text = '';
 
@@ -100,7 +100,7 @@ function displayHeatMap(app, id, args) {
         if (dr[0] != dr[1]) {
           text += metric[0] + ' Orange Factor ';
         }
-        text += '(' + hm[1] + ' failures, ' + metric[2] + ' pushes)';
+        text += '(' + metric[1] + ' failures, ' + metric[2] + ' pushes)';
         text += '</span></p>';
 
         text += "<table>";
@@ -125,9 +125,9 @@ function displayHeatMap(app, id, args) {
                 plat: getPlatformID(plat),
                 test: results[plat][item][1],
                 branch: 'mozilla-central',
-                type: 'opt',
+                type: type == 'd' ? 'debug' : 'opt',
                 startday: startday,
-                endday: getTboxDate(getDate(endday), -1)
+                endday: getTboxDate(getDate(endday), 0)
               });
               text += '" id="' + mapid + '">';
               text += parts[1] + '</a>';
@@ -143,9 +143,9 @@ function displayHeatMap(app, id, args) {
                 plat: getPlatformID(plat),
                 test: results[plat][item][1],
                 branch: 'mozilla-central',
-                type: 'opt',
+                type: type == 'd' ? 'debug' : 'opt',
                 startday: startday,
-                endday: getTboxDate(getDate(endday), -1)
+                endday: getTboxDate(getDate(endday), 0)
               });
               text += '" id="' + mapid + '">';
               text += item + '</a>';
@@ -155,7 +155,7 @@ function displayHeatMap(app, id, args) {
           text += "</td></tr>";
         }
         text += "</table>";
-            
+
         $(id).html(text);
         var det = '';
         if (dr[0] != dr[1]) {
@@ -178,12 +178,13 @@ function displayHeatMap(app, id, args) {
           }
           showBarGraphDay(graphdata, 'All', 'All', startday, endday);
 
-          det += displayDetails(app, data, '', '', '', '', startday, endday);
+          displayDetails(app, '#details', '', '', '', '', startday, endday);
         }
-        $("#details").html(det);
       },
       startkey: [startday],
       endkey: [endday],
+      group_level: 6, //TODO: consider using group_level to adjust filter on date (1), platform (4), test(5), type(6)
+      reduce: true
       });
 }
   

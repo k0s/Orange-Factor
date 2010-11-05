@@ -5,10 +5,12 @@
     <link rel="stylesheet" href="style/main.css" type="text/css">
   </head>
   <body>
+    <div id="wrapper" style="width:1100px">
     <div id="overall"></div>
     <div id="calendar"></div>
     <div id="sidebar">
       <p>Back to <a href="#" onclick="window.location.assign(baseUrl());return false;">overview</a></p>
+      <p><a href="orange.html?display=CountSummary">Research and Top Bugs</a><p>
       <p>Welcome to Orange Factor</p>
       <p>Here we will tell you the chance of getting an orange for any given checkin!</p>
       <p>Our goal is to provide a useful tool for measuring the orange in our trees while 
@@ -21,6 +23,7 @@
     <div id="placeholder"></div>
     <div id="details"></div>
     <div id="misc"></div>
+    </div>
   </body>
 
   <script src="vendor/couchapp/loader.js"></script>
@@ -36,24 +39,36 @@
   <script type="text/javascript" charset="utf-8">
   var gApp = null;
 
+  function displayTitle(id, title) {
+    document.title = "War on Orange: " + title;
+    $(id).html('<span id="overalltitle">' + title + '</span>');
+  }
+
   //TODO: consider using range as a filter for startkey/endkey or creating a new view
-  function displayMetric(app, id, range) {
-    var startdate = buildTboxDate(1970, 01, 01);
-    var enddate = getTboxDate();
+  function displayMetric(app, id, startdate, enddate, range) {
+    var gotStartDate = Boolean(startdate), gotEndDate = Boolean(enddate);
+
+    if (!startdate)
+      startdate = buildTboxDate(1970, 01, 01);
+    if (!enddate)
+      enddate = getTboxDate();
+
+    var titleprefix = 'Overall Orange Factor ';
+    if (gotStartDate && gotEndDate)
+      titleprefix = 'Orange Factor for ' + startdate + ' to ' + enddate + ': ';
+    else if (gotEndDate)
+      titleprefix = 'Overall Orange Factor up to ' + enddate + ': ';
+   
     app.db.view('woo/date_count',
                 {success: function(data) {
-                  text = '<span id="overalltitle">';
-                  text += 'Overall Orange Factor ' + calculateMetric(data, range)[0];
-                  text += '</span>';
-                  $(id).html(text);
+                  displayTitle(id, titleprefix + calculateMetric(data, range)[0]);
                 },
                 startkey: [startdate],
                 endkey: [enddate],
                 });
   }
-  
 
-  function parseTestRun(data, plat, branch, type) {
+  function parseTestRun(data, platindex, plat, typeindex, type, dateindex) {
     var results = {};
     count = 0;
     for (row in data.rows) {
@@ -65,30 +80,23 @@
       var mplat = false;
       if (plat == '' || plat == 'All') {
         mplat = true;;
-      } else if (plat == r.value.platform) {
+      } else if (plat == r.key[platindex]) {
         mplat = true;
       }
       
-      var mbranch = false;
-      if (branch == '' || branch == 'All') {
-        mbranch = true;;
-      } else if (branch == r.value.branch) {
-        mbranch = true;
-      }
-
       var mtype = false;
       if (type == '' || type == 'All') {
-        mtype = true;;
-      } else if (type == r.value.buildtype) {
+        mtype = true;
+      } else if (type == r.key[typeindex]) {
         mtype = true;
       }
 
-      if (mplat && mbranch && mtype) {
-        if (results[r.key[1]] == null) {
-          results[r.key[1]] = new Array();
+      if (mplat && mtype) {
+        if (results[r.key[dateindex]] == null) {
+          results[r.key[dateindex]] = new Array();
         }
-        results[r.key[1]].push({"date":r.key[0], "data":r.value});
-        count++;
+        results[r.key[dateindex]].push({"platform":r.key[platindex], "count":r.value});
+        count += r.value;
       }
     }
     return [results, count];
@@ -148,7 +156,7 @@
     return text;  
   }
 
-  function displayTestRun(app, id, args) {
+  function displayTestRun(app, id, titleid, args) {
       var plat = args['plat'],
           test = args['test'],
           branch = args['branch'],
@@ -162,18 +170,33 @@
       if (endday == "" || endday === undefined) {
         endday = getTboxDate();
       }
-      
-      var starttest = test;
-      var endtest = test;
-      if (test == 'All') starttest = '';
-      if (test == 'All') endtest = {};
 
-      app.db.view('woo/bytestrun', 
+      var title = "Test Run Details";
+      if (startday)
+        title += ", " + startday + " to ";
+      else
+        title += " up to ";
+      title += endday;
+      displayTitle(titleid, title);
+
+      var view = buildCouchView('bug_simple', plat, type, test, startday, endday);
+      var query = view[0];
+      var start_key = view[1];
+      var end_key = view[2];
+      var index_map = view[3];
+      var platindex = index_map[0];
+      var typeindex = index_map[1];
+      var testindex = index_map[2];
+      var dateindex = index_map[3];
+
+      app.db.view(query, 
          {success: function(data) {
             $("#details").html('');
             $("#placeholder").html('');
-            results = parseTestRun(data, plat, branch, type);
-            dr = getDateRange(data, 1);
+            results = parseTestRun(data, platindex, plat, typeindex, type, dateindex);
+            dr = getDateRange(data, dateindex, startday);
+            if (startday == "") startday = dr[0];
+
             var text = '<span id="title">';
             text += '<form>';
             text += buildDropDown(platforms, "platform", id, plat, test, branch, type, startday, endday);
@@ -196,7 +219,10 @@
               for (date in results[0]) {
                 var parts = date.split('-');
                 var d = new Date(parts[0], (parseInt(parts[1], 10) -1), parts[2]);
-                graphdata.push([d.getTime(), results[0][date].length]);
+                var datecount = 0;
+                for (var dc in results[0][date])
+                  datecount += results[0][date][dc].count;
+                graphdata.push([d.getTime(), datecount]);
               }
               showBarGraph(graphdata, test, plat, startday, endday);
             } else {
@@ -204,11 +230,11 @@
               var dayresults = {};
               for (date in results[0]) {
                 for (item in results[0][date]) {
-                  var rdata = results[0][date][item].data;
+                  var rdata = results[0][date][item];
                   if (dayresults[rdata.platform] === undefined) {
                     dayresults[rdata.platform] = 0;
                   }
-                  dayresults[rdata.platform] += 1;
+                  dayresults[rdata.platform] += rdata.count;
                 }
               }
               
@@ -217,29 +243,31 @@
               }
               showBarGraphDay(graphdata, test, plat, startday, endday);
             }
-            $("#details").html(displayDetails(app, data, plat, test, branch, type, startday, endday));
+            $("#details").html(listDetails(data, testindex));
             $(id).html(text);
          },
-         startkey: [starttest, startday],
-         endkey: [endtest, endday],
+         startkey: start_key,
+         endkey: end_key,
+         group_level: 6,
+         reduce: true
          });
   }
 
   function mapLoaded() {
-    return loadSearchQuery(gApp, "#display");
+    return loadSearchQuery(gApp, "#display", "#overall");
   }
 
   function displayOverview(app) {
     displayMetric(app, "#overall");
     buildCalendar(app, "#calendar");
-    clearPage(true);
+    clearPage(false);
     if (!mapLoaded()) {
       clearPage(true);
-      displayHeatMap(app, "#display", {});
+      displayHeatMap(app, "#display", "#overall", {});
     }
   }
 
-  function loadSearchQuery(app, id) {
+  function loadSearchQuery(app, id, titleid) {
     var params = document.location.search.slice(1).split("&");
     var display_func = "";
     var args = new Object();
@@ -257,7 +285,7 @@
     if (!display_func || typeof window[display_func] != "function")
       return false;
 
-    window[display_func](app, id, args);
+    window[display_func](app, id, titleid, args);
     return true;
  }
 

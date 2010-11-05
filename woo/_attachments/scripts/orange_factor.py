@@ -5,6 +5,7 @@ except:
 import urllib
 import re
 import datetime
+import time
 import httplib2
 import math
 import tempfile
@@ -13,11 +14,13 @@ import os
 http = httplib2.Http(".cache")
 
 #push_url = 'http://jmaher.couchone.com:5984/orange_factor'
-push_url = 'http://localhost:5984/orange_factor'
+push_url = 'http://10.2.76.100:5984/orange_factor'
+#push_url = 'http://localhost:5984/orange_factor'
+#push_url = 'http://localhost:5984/oranges'
 
 g_bugdata = '/home/joel/mozilla/orange_data/Bugs/'
 g_tboxdata = '/home/joel/mozilla/orange_data/'
-gDateRange = 30
+gDateRange = 75
 
 
 def pushToCouch(data, wooData=None):
@@ -26,12 +29,11 @@ def pushToCouch(data, wooData=None):
       rev = wooRev['rows'][0]['value']
       d_push_url = push_url
       d_push_url += '/' + wooData['rows'][0]['id']
-      d_push_url += '?rev="' + rev + '"'
+      d_push_url += '?rev=' + rev + ''
       print "delete push_url: " + str(d_push_url)
       resp, content = http.request(d_push_url, method='DELETE')
 
     #TODO: query for same date, then compare length of results, if equal don't repost
-      print "do a push on this data"
     resp, content = http.request(push_url, method='POST',
                                  body=json.dumps(data), headers={'content-type':'application/json'})
 
@@ -55,7 +57,6 @@ def getBugzillaData(bugid=None):
       buglist = jsonurl.read()
       jsonurl.close()
     else:
-      print {'bugs':[{'id':bugid}]}
       return {'bugs':[{'id':bugid}]}
     
     result = json.loads(buglist)
@@ -64,7 +65,6 @@ def getBugzillaData(bugid=None):
 def getBugzillaDataLive(bugid):
     result = getBugzillaData(bugid)
     for bug in result['bugs']:
-        print bug
         apiURL = "https://api-dev.bugzilla.mozilla.org/latest/bug?id=" + str(bug['id']) + "&include_fields=id,summary,comments"
         jsonurl = urllib.urlopen(apiURL)
         buginfo = jsonurl.read()
@@ -89,8 +89,6 @@ def getBugzillaDataLive_DATE(yesterday, tomorrow):
     apiURL += "&changed_before=" + str(tomorrow)
 #    apiURL += "&status=new,assigned,reopened"
     apiURL += "&include_fields=id,summary,comments"
-    print apiURL
-    return
     jsonurl = urllib.urlopen(apiURL)
 
     data = jsonurl.read()
@@ -113,6 +111,7 @@ def getHGPushCount(today, tomorrow):
     count = 0
     for push in result:
       count += 1
+
     return [count, data];
 
 def findMatchDetails(text):
@@ -154,8 +153,8 @@ def collectHGPushes(refdate):
     allresults = {}
     yesterday = refdate - datetime.timedelta(days=gDateRange)
     while (yesterday <= refdate):
-      print "adding hgpush: " + str(yesterday)
-      allresults[str(yesterday)] = [pushcount, pushdata] = getHGPushCount(yesterday, yesterday + datetime.timedelta(days=1))
+      [pushcount, pushdata] = getHGPushCount(yesterday, yesterday + datetime.timedelta(days=1))
+      allresults[str(yesterday)] = [pushcount, pushdata]
       yesterday += datetime.timedelta(days=1)
 
     return allresults
@@ -225,13 +224,18 @@ def parseData(refdate):
               rev = re.compile("revision: ([a-zA-Z0-9]+)")
               matches = rev.search(gz)
               if (matches):
-                revision = matches.group(0)
+                revision = matches.group(0).split(':')[1].strip()
 
+              bd = re.compile("builddate: ([0-9]+)")
+              matches = bd.search(gz)
+              if (matches):
+                builddate = matches.group(0).split(':')[1].strip()
+                bdate = str(datetime.date.fromtimestamp(eval(builddate + ".0")))
               try:
-                x = allresults[str(d)]
+                x = allresults[bdate]
               except:
-                allresults[str(d)] = []
-              allresults[str(d)].append({"revision":revision,"bug":bugdata['id'],"summary":bugdata['summary'],"platform":platform,"branch":branch,"buildtype":buildtype,"test":testrun,"date":str(d),"timestamp":comment['creation_time']})
+                allresults[bdate] = []
+              allresults[bdate].append({"revision":revision,"bug":bugdata['id'],"summary":bugdata['summary'],"platform":platform,"branch":branch,"buildtype":buildtype,"test":testrun,"date":bdate,"timestamp":comment['creation_time']})
 #      print "bug: " + str(bugdata['id']) + ", comments: " + str(len(bugdata['comments'])) + ", good date: " + str(c) + ", tbox comment: " + str(m)
     return allresults
 
@@ -248,6 +252,47 @@ def getWooRev(id):
         return result
     return retVal
 
+
+def deleteWooDuplicates(date):
+    retVal = None
+    date = datetime.datetime.fromtimestamp(time.mktime(time.strptime(date, "%Y-%m-%d")))
+
+    nextdate = date + datetime.timedelta(days=1)
+
+    apiURL = push_url + "/_design/woo/_view/date_count?startkey=[%22" + str(date) + "%22]&endkey=[%22" + str(nextdate) + "%22]"
+    jsonurl = urllib.urlopen(apiURL)
+    
+    data = jsonurl.read()
+    jsonurl.close()
+    result = json.loads(data)
+    highvalue = 0
+    highrev = ''
+    highid = ''
+    try:
+      if (result["reason"] == "missing"):
+        return
+    except:
+      pass
+
+    if (result and 
+        result != '' and 
+        len(result['rows']) > 0):
+        for idx in result['rows']:
+          if idx['key'][2] >= highvalue:
+            if highrev != '':
+              d_push_url = push_url
+              d_push_url += '/' + str(highid)
+              d_push_url += '?rev=' + str(highrev) + ''
+              print "delete push_url(" + str(date) + "): " + str(d_push_url) + " : " + str(highvalue)
+              try:
+                resp, content = http.request(d_push_url, method='DELETE')
+              except: 
+                print "\nfailed to delete, moving on\n"
+            highid = idx['id']
+            try:
+              highrev = getWooRev(highid)['rows'][0]['value']
+            except: continue
+            highvalue = idx['key'][2]
 
 def getWooResults(date):
     retVal = None
@@ -268,23 +313,27 @@ def main():
     startdate = today - datetime.timedelta(days=1)
     allresults = parseData(startdate)
     hgpushes = collectHGPushes(today)
-    
+
+    refdate = today - datetime.timedelta(days=60)
+
     for r in sorted(allresults):
       push = False
       try:
-        pushcount, pushdata = hgpushes[r]
+        pushcount, pushdata = hgpushes[str(r)]
       except:
         continue #we don't have push data, lets skip for now
+
+      deleteWooDuplicates(r)
       wooData = getWooResults(r)
       if (wooData != None and len(wooData['rows']) > 0):
-        if len(allresults[r]) != wooData['rows'][0]['value']:
+        if len(allresults[str(r)]) != wooData['rows'][0]['key'][2]:
           push = True
       else:
         push = True
     
       if push == True:
-        pushToCouch({"date":str(r),"pushcount":pushcount,"pushes":pushdata,"oranges":allresults[r]}, wooData)
-
+        print "pushing to couch: " + str(r) + " : " + str(pushcount)
+        pushToCouch({"date":str(r),"pushcount":pushcount,"pushes":pushdata,"oranges":allresults[str(r)]}, wooData)
     return 
   
 class Cache(dict):
